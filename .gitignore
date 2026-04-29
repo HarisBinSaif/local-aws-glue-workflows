@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Generated DAGs (examples regenerate these)
+examples/*/dags/
+
+# AI/agent tooling — project-level state, configs, and convention files.
+# Listed broadly so the public repo stays free of any AI-tool fingerprint.
+.claude/
+.aider*/
+.aider*
+*.aider.conf.yml
+.cursor/
+.cursorrules
+.continue/
+.windsurf*
+.codeium/
+.codex/
+.copilot*
+.tabnine*
+.gptcommit*
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+docs/superpowers/

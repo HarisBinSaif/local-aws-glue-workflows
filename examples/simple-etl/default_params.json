@@ -1,0 +1,5 @@
+{
+  "OUTPUT_BUCKET": "s3://local-output",
+  "INPUT_PATH": "s3://local-input/sample.csv",
+  "ENV": "local"
+}
