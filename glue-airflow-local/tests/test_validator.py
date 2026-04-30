@@ -28,6 +28,7 @@ def test_no_start_trigger_rejected():
     from glue_airflow_local.model import (
         Action,
         Condition,
+        Job,
         Predicate,
         Trigger,
         TriggerType,
@@ -44,7 +45,10 @@ def test_no_start_trigger_rejected():
                 predicate=Predicate(conditions=(Condition(job_name="a"),)),
             )
         ],
-        jobs={"a", "b"},
+        jobs={
+            "a": Job(name="a", script_location="s3://x/a.py"),
+            "b": Job(name="b", script_location="s3://x/b.py"),
+        },
     )
     with pytest.raises(InvalidWorkflowError, match="entry trigger"):
         validate_workflow(wf)

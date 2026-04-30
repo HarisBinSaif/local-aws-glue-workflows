@@ -26,4 +26,22 @@ mypy src              # type-clean under --strict
 
 ## Scope
 
-See [`CLAUDE.md`](./CLAUDE.md). v0.1 is intentionally narrow: jobs only, three trigger types, Terraform input, mock executor. Out-of-scope work (real Glue Docker, crawlers, EVENT triggers, bookmarks) is for later plans — please open an issue before starting.
+v0.2 covers: Terraform input, jobs only, three trigger types (ON_DEMAND, CONDITIONAL, SCHEDULED), and two executors (mock + glue-docker). Out-of-scope: crawlers, EVENT triggers, job bookmarks, Glue Catalog API mocks. These are deferred to later plans — please open an issue before starting.
+
+## Docker stack (Plan B)
+
+The Glue Docker executor lives in [`docker/`](./docker). To run the end-to-end test:
+
+```bash
+docker compose -f docker/docker-compose.yaml up -d --build
+cd glue-airflow-local
+pytest -m docker_e2e -v
+```
+
+The `glue-runner` image is large (~5GB+); first build is slow (Glue 5 pull dominates). Subsequent builds reuse cached layers.
+
+When developing the operator or translator, you don't need to rebuild — `glue-airflow-local` is mounted into the Airflow containers from the host and installed editably. Restart the scheduler to pick up code changes:
+
+```bash
+docker compose -f docker/docker-compose.yaml restart airflow-scheduler
+```

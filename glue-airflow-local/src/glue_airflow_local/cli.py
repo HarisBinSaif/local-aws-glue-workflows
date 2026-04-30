@@ -41,13 +41,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command != "translate":  # pragma: no cover - argparse already validates
         parser.error(f"Unknown command: {args.command}")
 
-    if args.executor != "mock":
-        _LOG.error(
-            "executor=%s is not implemented in v0.1; only --executor=mock is supported.",
-            args.executor,
-        )
-        return 2
-
     workflow_dir = args.workflow_dir or args.tf_dir
     workflows = parse_directory(args.tf_dir)
 
@@ -60,10 +53,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         ]
 
     for wf, out_path in zip(workflows, output_paths, strict=True):
-        source = translate_workflow(wf, workflow_dir=str(workflow_dir))
+        source = translate_workflow(wf, workflow_dir=str(workflow_dir), executor=args.executor)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(source)
-        _LOG.info("Wrote %s (workflow=%s, jobs=%d)", out_path, wf.name, len(wf.jobs))
+        _LOG.info(
+            "Wrote %s (workflow=%s, jobs=%d, executor=%s)",
+            out_path, wf.name, len(wf.jobs), args.executor,
+        )
 
     return 0
 

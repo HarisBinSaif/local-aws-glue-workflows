@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "glue-airflow-local"
-version = "0.1.0"
-description = "Translate AWS Glue Workflow Terraform definitions into Airflow DAGs that run locally with mocks."
+version = "0.2.0"
+description = "Translate AWS Glue Workflow Terraform into local Airflow DAGs — fast mocks, or real PySpark in a local Glue 5 container."
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Haris Bin Saif" }]
@@ -13,6 +13,7 @@ requires-python = ">=3.10"
 dependencies = [
     "python-hcl2>=4.3.0",
     "apache-airflow>=2.9,<3",
+    "docker>=7,<8",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +47,13 @@ files = ["src"]
 module = ["hcl2", "hcl2.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["docker", "docker.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+markers = [
+    "docker_e2e: end-to-end test that requires `docker compose up` to be running",
+]

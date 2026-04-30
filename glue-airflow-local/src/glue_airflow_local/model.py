@@ -31,8 +31,16 @@ class LogicalOperator(str, Enum):
 
 
 @dataclass(frozen=True)
+class Job:
+    """A Glue ETL job: name plus the location of its PySpark script."""
+
+    name: str
+    script_location: str
+
+
+@dataclass(frozen=True)
 class Action:
-    """Single action in a trigger -- for v0.1, only job actions."""
+    """Single action in a trigger -- for now, only job actions (crawlers deferred)."""
 
     job_name: str
 
@@ -102,5 +110,5 @@ class Workflow:
 
     name: str
     triggers: list[Trigger]
-    jobs: set[str] = field(default_factory=set)
+    jobs: dict[str, Job] = field(default_factory=dict)
     description: str | None = None

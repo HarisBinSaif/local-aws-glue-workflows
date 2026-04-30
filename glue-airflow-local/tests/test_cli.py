@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 import sys
 
+import pytest
+
 from glue_airflow_local.cli import main
 
 
@@ -17,7 +19,7 @@ def test_translate_writes_dag_file(fixtures_dir, tmp_path, capsys):
     assert 'dag_id="linear-etl"' in text
 
 
-def test_translate_glue_docker_executor_errors(fixtures_dir, tmp_path):
+def test_translate_glue_docker_executor_writes_dag_with_glue_docker(fixtures_dir, tmp_path):
     out = tmp_path / "dag.py"
     rc = main([
         "translate",
@@ -25,7 +27,23 @@ def test_translate_glue_docker_executor_errors(fixtures_dir, tmp_path):
         "--output", str(out),
         "--executor", "glue-docker",
     ])
-    assert rc != 0
+    assert rc == 0
+    text = out.read_text()
+    assert "GlueDockerOperator" in text
+    assert "MockGlueJobOperator" not in text
+
+
+def test_translate_unknown_executor_rejected_by_argparse(fixtures_dir, tmp_path):
+    out = tmp_path / "dag.py"
+    with pytest.raises(SystemExit) as exc_info:
+        main([
+            "translate",
+            str(fixtures_dir / "linear_chain"),
+            "--output", str(out),
+            "--executor", "bogus",
+        ])
+    # argparse exits with code 2 on invalid choices
+    assert exc_info.value.code == 2
 
 
 def test_cli_invocable_via_module(fixtures_dir, tmp_path):

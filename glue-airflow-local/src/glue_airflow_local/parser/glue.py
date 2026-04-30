@@ -9,6 +9,7 @@ from glue_airflow_local.exceptions import GlueParseError, UnsupportedTriggerErro
 from glue_airflow_local.model import (
     Action,
     Condition,
+    Job,
     JobState,
     LogicalOperator,
     Predicate,
@@ -80,7 +81,7 @@ def _extract_actions(attrs: dict[str, Any], table: ResourceTable) -> list[Action
     for action_block in _block_all(attrs["actions"]):
         if "job_name" not in action_block:
             raise UnsupportedTriggerError(
-                "v0.1 supports only job actions; crawler actions deferred to v0.2"
+                "Only job actions are supported; crawler actions are deferred to a later release"
             )
         actions.append(Action(job_name=resolve_string(str(action_block["job_name"]), table)))
     return actions
@@ -112,6 +113,27 @@ def _extract_predicate(attrs: dict[str, Any], table: ResourceTable) -> Predicate
         conditions.append(Condition(job_name=job_name, state=state))
 
     return Predicate(conditions=tuple(conditions), logical=logical)
+
+
+def _extract_jobs(parsed_files: list[dict[str, Any]], table: ResourceTable) -> dict[str, Job]:
+    """Build a name -> Job map from all aws_glue_job resources across the parsed files."""
+    jobs: dict[str, Job] = {}
+    for resource_type, logical_name, attrs in _iter_resources(parsed_files):
+        if resource_type != "aws_glue_job":
+            continue
+        name = resolve_string(str(attrs.get("name", logical_name)), table)
+        command_block = attrs.get("command")
+        if command_block is None:
+            raise GlueParseError(f"aws_glue_job {logical_name!r} missing 'command' block")
+        command = _block_first(command_block)
+        script_raw = command.get("script_location")
+        if script_raw is None:
+            raise GlueParseError(
+                f"aws_glue_job {logical_name!r}: command.script_location is required"
+            )
+        script_location = resolve_string(str(script_raw), table)
+        jobs[name] = Job(name=name, script_location=script_location)
+    return jobs
 
 
 def _extract_trigger(
@@ -157,6 +179,7 @@ def extract_workflows(parsed_files: Iterable[dict[str, Any]]) -> list[Workflow]:
     """Build Workflow IR from a sequence of parsed .tf documents."""
     parsed_list = list(parsed_files)
     table = _build_resource_table(parsed_list)
+    all_jobs = _extract_jobs(parsed_list, table)
 
     workflows_by_name: dict[str, Workflow] = {}
     for resource_type, logical_name, attrs in _iter_resources(parsed_list):
@@ -181,8 +204,14 @@ def extract_workflows(parsed_files: Iterable[dict[str, Any]]) -> list[Workflow]:
             raise GlueParseError(
                 f"Trigger {trigger.name!r} references unknown workflow {wf_name!r}"
             )
-        workflows_by_name[wf_name].triggers.append(trigger)
+        workflow = workflows_by_name[wf_name]
+        workflow.triggers.append(trigger)
         for action in trigger.actions:
-            workflows_by_name[wf_name].jobs.add(action.job_name)
+            if action.job_name not in all_jobs:
+                raise GlueParseError(
+                    f"Trigger {trigger.name!r} references unknown job {action.job_name!r} "
+                    f"(no aws_glue_job resource defines it)"
+                )
+            workflow.jobs[action.job_name] = all_jobs[action.job_name]
 
     return list(workflows_by_name.values())

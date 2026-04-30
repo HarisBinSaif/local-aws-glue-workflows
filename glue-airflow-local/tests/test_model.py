@@ -6,6 +6,7 @@ from glue_airflow_local.exceptions import InvalidWorkflowError
 from glue_airflow_local.model import (
     Action,
     Condition,
+    Job,
     Predicate,
     Trigger,
     TriggerType,
@@ -53,7 +54,7 @@ def test_workflow_construct_minimal():
                 actions=[Action(job_name="extract")],
             )
         ],
-        jobs={"extract"},
+        jobs={"extract": Job(name="extract", script_location="s3://bucket/extract.py")},
     )
     assert wf.name == "my-wf"
-    assert wf.jobs == {"extract"}
+    assert wf.jobs["extract"].script_location == "s3://bucket/extract.py"

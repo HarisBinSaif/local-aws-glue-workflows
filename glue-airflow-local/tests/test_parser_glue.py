@@ -14,7 +14,8 @@ def test_single_ondemand_workflow(fixtures_dir):
     wf = workflows[0]
     assert wf.name == "etl-workflow"
     assert wf.description == "Single on-demand trigger workflow"
-    assert wf.jobs == {"extract-job"}
+    assert set(wf.jobs.keys()) == {"extract-job"}
+    assert wf.jobs["extract-job"].script_location == "s3://scripts/extract.py"
     assert len(wf.triggers) == 1
     trig = wf.triggers[0]
     assert trig.name == "start-trigger"
@@ -28,7 +29,8 @@ def test_linear_chain_with_conditional_triggers(fixtures_dir):
     workflows = extract_workflows([parsed])
     assert len(workflows) == 1
     wf = workflows[0]
-    assert wf.jobs == {"extract-job", "transform-job", "load-job"}
+    assert set(wf.jobs.keys()) == {"extract-job", "transform-job", "load-job"}
+    assert wf.jobs["extract-job"].script_location == "s3://x/extract.py"
 
     by_name = {t.name: t for t in wf.triggers}
     assert by_name["start"].type is TriggerType.ON_DEMAND
@@ -47,6 +49,8 @@ def test_scheduled_trigger(fixtures_dir):
     parsed = read_tf_file(fixtures_dir / "scheduled" / "main.tf")
     workflows = extract_workflows([parsed])
     wf = workflows[0]
+    assert set(wf.jobs.keys()) == {"ingest-job"}
+    assert wf.jobs["ingest-job"].script_location == "s3://x/ingest.py"
     assert len(wf.triggers) == 1
     trig = wf.triggers[0]
     assert trig.type is TriggerType.SCHEDULED
@@ -58,7 +62,8 @@ def test_parallel_branches_with_and_predicate(fixtures_dir):
     parsed = read_tf_file(fixtures_dir / "parallel_branches" / "main.tf")
     workflows = extract_workflows([parsed])
     wf = workflows[0]
-    assert wf.jobs == {"source-job", "branch-a-job", "branch-b-job", "merge-job"}
+    assert set(wf.jobs.keys()) == {"source-job", "branch-a-job", "branch-b-job", "merge-job"}
+    assert wf.jobs["source-job"].script_location == "s3://x/src.py"
 
     by_name = {t.name: t for t in wf.triggers}
     merge = by_name["merge-after"]

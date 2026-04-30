@@ -1,7 +1,8 @@
-"""Mock Glue job operator — the default executor for v0.1.
+"""Mock Glue job operator — the fast-iteration default executor.
 
 Runs nothing real: loads default_params.json from the workflow directory,
-merges DAG-run conf on top, and either succeeds, fails, or sleeps.
+merges DAG-run conf on top, and either succeeds, fails, or sleeps. Use for
+debugging workflow shape (dependency graph, triggers) without Spark or Docker.
 """
 
 from __future__ import annotations

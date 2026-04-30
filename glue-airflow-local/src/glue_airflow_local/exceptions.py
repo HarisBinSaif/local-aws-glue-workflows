@@ -3,7 +3,7 @@
 GlueParseError covers Terraform-to-IR parsing failures (unresolved references,
 malformed blocks). InvalidWorkflowError covers IR invariant violations
 (structural issues caught after parsing). UnsupportedTriggerError flags Glue
-features outside the v0.1 scope.
+features outside the current supported scope.
 """
 
 
