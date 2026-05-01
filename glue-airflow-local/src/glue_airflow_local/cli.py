@@ -3,14 +3,29 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any, cast
 
 from glue_airflow_local.parser import parse_directory
 from glue_airflow_local.translator import translate_workflow
 
 _LOG = logging.getLogger("glue_airflow_local")
+
+
+def _load_default_params(workflow_dir: Path) -> dict[str, Any]:
+    """Read default_params.json from the workflow directory if present."""
+    path = workflow_dir / "default_params.json"
+    if not path.is_file():
+        return {}
+    data = json.loads(path.read_text())
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"{path} must contain a JSON object; got {type(data).__name__}"
+        )
+    return cast(dict[str, Any], data)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -42,6 +57,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error(f"Unknown command: {args.command}")
 
     workflow_dir = args.workflow_dir or args.tf_dir
+    default_params = _load_default_params(workflow_dir)
+
     workflows = parse_directory(args.tf_dir)
 
     if len(workflows) == 1:
@@ -53,7 +70,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         ]
 
     for wf, out_path in zip(workflows, output_paths, strict=True):
-        source = translate_workflow(wf, workflow_dir=str(workflow_dir), executor=args.executor)
+        source = translate_workflow(
+            wf, default_params=default_params, executor=args.executor
+        )
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(source)
         _LOG.info(

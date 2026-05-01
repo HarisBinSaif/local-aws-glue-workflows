@@ -46,8 +46,7 @@ docker compose -f docker/docker-compose.yaml exec -T airflow-scheduler \
     airflow dags unpause simple-etl
 
 docker compose -f docker/docker-compose.yaml exec -T airflow-scheduler \
-    airflow dags trigger simple-etl \
-        --conf "$(cat examples/simple-etl/default_params.json)"
+    airflow dags trigger simple-etl
 ```
 
 Airflow UI: http://localhost:8080 (airflow / airflow). Watch `simple-etl` run end-to-end (~30–60s after first Spark warm-up). When it succeeds, the result Parquet is at `local-output/department-summary/` in MinIO (UI: http://localhost:9001, login `minio` / `minio123`).
@@ -56,7 +55,7 @@ See [`examples/simple-etl/README.md`](./examples/simple-etl/README.md) for the f
 
 ## Status
 
-v0.2 — both executor modes work end-to-end. Glue 5.0 (Spark 3.5, Python 3.11). Tested on Linux and Apple Silicon Docker.
+v0.3 — both executor modes work end-to-end. Generated DAGs are filesystem-independent (`default_params` inlined at translate time). Glue 5.0 image pinned to a specific digest. Tested on Linux and Apple Silicon Docker.
 
 ## Known limitations
 
@@ -66,11 +65,14 @@ v0.2 — both executor modes work end-to-end. Glue 5.0 (Spark 3.5, Python 3.11).
 - **OR predicates and non-`SUCCEEDED` conditions are explicitly rejected** at translate time rather than silently mistranslated to AND/SUCCEEDED.
 - **Terraform reference resolution** is limited to inter-resource references (`aws_glue_job.foo.name`). `var.x`, `local.y`, `module.z.foo`, `data.*.foo` are not resolved.
 - **Glue version**: 5.0 only. Older Glue runtimes (4.0/3.0) would need a different image.
-- **`workflow_dir` is baked into the generated DAG as a host path.** When running with `--executor=glue-docker`, the DAG's task code can't read `default_params.json` at runtime (the host path doesn't exist inside the Airflow container). Workaround: pass parameters via `--conf "$(cat default_params.json)"` at trigger time, as shown in the Quickstart above. v0.3 will inline default_params directly into the generated DAG and drop the runtime file lookup.
 
 ## Security note
 
 The local Docker stack is for development only. It uses plaintext default credentials (`airflow`/`airflow`, `minio`/`minio123`) and bind-mounts the host's Docker socket into the Airflow scheduler so the operator can `docker exec` into the Glue container. Don't expose any of these services on a network you don't fully control. See [`docker/README.md`](./docker/README.md#security--local-development-only) for details.
+
+## v0.2 → v0.3 breaking change
+
+The operator constructor signature changed: `MockGlueJobOperator` and `GlueDockerOperator` no longer take `workflow_dir`. Both now take `default_params: dict | None`, which the translator inlines into the generated DAG at translate time. **Re-run `glue-airflow-local translate ...` against your Terraform to regenerate any v0.2 DAGs**; loading an old DAG file will fail with a `TypeError` for the missing `workflow_dir` kwarg.
 
 ## License
 

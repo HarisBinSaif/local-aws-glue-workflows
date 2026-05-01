@@ -16,7 +16,7 @@ The `airflow-dags` volume is shared between the scheduler and webserver. To run 
 2. Drop the generated file into the `airflow-dags` volume (e.g., copy or `docker cp`).
 3. Trigger from the Airflow UI.
 
-Future improvement: have the translator write directly into the volume by default. v0.3 territory.
+Future improvement: have the translator write directly into the volume by default.
 
 ## How S3 calls reach MinIO
 
@@ -48,4 +48,4 @@ This stack is **for local development only**. It contains:
 - **Plaintext default credentials** for Airflow (`airflow` / `airflow`), MinIO (`minio` / `minio123`), and Postgres (`airflow` / `airflow`).
 - **A bind-mount of the host's Docker socket** (`/var/run/docker.sock`) into the Airflow scheduler so the operator can `docker exec` into the Glue container. Anything running in that container has root-equivalent access on the host Docker daemon.
 
-Do not expose any of these services on a network you don't fully control. Don't run this stack on a shared host. The Glue 5 image is pinned to a floating tag (`public.ecr.aws/glue/aws-glue-libs:5`); for production you'd pin to a specific digest.
+Do not expose any of these services on a network you don't fully control. Don't run this stack on a shared host. The Glue 5 image is pinned to a specific digest (see `glue-runner.Dockerfile`); bump intentionally when adopting a newer Glue runtime.

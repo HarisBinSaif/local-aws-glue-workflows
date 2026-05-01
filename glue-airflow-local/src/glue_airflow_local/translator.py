@@ -7,6 +7,7 @@ import logging
 import re
 from collections import defaultdict
 from io import StringIO
+from typing import Any
 
 from glue_airflow_local.exceptions import UnsupportedTriggerError
 from glue_airflow_local.model import (
@@ -24,19 +25,20 @@ _LOG = logging.getLogger(__name__)
 def translate_workflow(
     workflow: Workflow,
     *,
-    workflow_dir: str,
+    default_params: dict[str, Any] | None = None,
     executor: str = "mock",
 ) -> str:
     """Return Python source for an Airflow DAG that mirrors `workflow`.
 
     Args:
         workflow: the validated IR.
-        workflow_dir: path the operator should read default_params.json from
-            (rendered into the generated source as a string).
+        default_params: per-workflow parameters merged into each task at runtime.
+            Inlined as a dict literal in the generated DAG so the file is
+            filesystem-independent. Empty dict if omitted.
         executor: which operator to instantiate per job. ``"mock"`` (default)
-            emits ``MockGlueJobOperator`` for orchestration-only debugging;
-            ``"glue-docker"`` emits ``GlueDockerOperator`` which runs the
-            user's PySpark inside a local Glue container.
+            emits ``MockGlueJobOperator``; ``"glue-docker"`` emits
+            ``GlueDockerOperator`` which runs the user's PySpark inside a
+            local Glue container.
     """
     if executor not in _VALID_EXECUTORS:
         raise ValueError(
@@ -45,6 +47,7 @@ def translate_workflow(
     validate_workflow(workflow)
     _check_translation_supported(workflow)
 
+    params_literal = repr(default_params or {})
     schedule = _pick_schedule(workflow)
     upstreams = _build_upstream_map(workflow)
 
@@ -74,9 +77,9 @@ def translate_workflow(
             var = base
         var_for[job_name] = var
         if executor == "mock":
-            _emit_mock_task(out, var, job_name, workflow_dir)
+            _emit_mock_task(out, var, job_name, params_literal)
         else:
-            _emit_glue_docker_task(out, var, workflow.jobs[job_name], workflow_dir)
+            _emit_glue_docker_task(out, var, workflow.jobs[job_name], params_literal)
 
     for downstream, ups in sorted(upstreams.items()):
         for up in sorted(ups):
@@ -85,20 +88,20 @@ def translate_workflow(
     return out.getvalue()
 
 
-def _emit_mock_task(out: StringIO, var: str, job_name: str, workflow_dir: str) -> None:
+def _emit_mock_task(out: StringIO, var: str, job_name: str, params_literal: str) -> None:
     out.write(f"    {var} = MockGlueJobOperator(\n")
     out.write(f'        task_id="{var}",\n')
     out.write(f'        job_name="{job_name}",\n')
-    out.write(f"        workflow_dir={workflow_dir!r},\n")
+    out.write(f"        default_params={params_literal},\n")
     out.write("    )\n")
 
 
-def _emit_glue_docker_task(out: StringIO, var: str, job: Job, workflow_dir: str) -> None:
+def _emit_glue_docker_task(out: StringIO, var: str, job: Job, params_literal: str) -> None:
     out.write(f"    {var} = GlueDockerOperator(\n")
     out.write(f'        task_id="{var}",\n')
     out.write(f"        job_name={job.name!r},\n")
     out.write(f"        script_location={job.script_location!r},\n")
-    out.write(f"        workflow_dir={workflow_dir!r},\n")
+    out.write(f"        default_params={params_literal},\n")
     out.write("    )\n")
 
 

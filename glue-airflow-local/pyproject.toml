@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "glue-airflow-local"
-version = "0.2.0"
+version = "0.3.0"
 description = "Translate AWS Glue Workflow Terraform into local Airflow DAGs — fast mocks, or real PySpark in a local Glue 5 container."
 readme = "README.md"
 license = { text = "Apache-2.0" }

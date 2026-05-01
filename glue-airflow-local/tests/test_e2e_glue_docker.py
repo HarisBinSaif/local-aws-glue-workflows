@@ -99,21 +99,12 @@ def test_simple_etl_runs_end_to_end(tmp_path: Path) -> None:
         "airflow", "dags", "unpause", "simple-etl",
     ])
 
-    # The generated DAG hardcodes ``workflow_dir`` to a path on the developer's host
-    # machine, which is not visible inside the airflow-scheduler container. The
-    # operator reads ``default_params.json`` from there and merges it with
-    # ``dag_run.conf``. Inside the container the file is missing, so we pass the
-    # bucket params via ``--conf`` to satisfy the PySpark scripts'
-    # ``getResolvedOptions(...)`` calls.
-    conf = (REPO_ROOT / "examples" / "simple-etl" / "default_params.json").read_text()
-
     run_id = f"e2e-{int(time.time())}-{uuid.uuid4().hex[:6]}"
     _run([
         *COMPOSE,
         "exec", "-T", "airflow-scheduler",
         "airflow", "dags", "trigger", "simple-etl",
         "--run-id", run_id,
-        "--conf", conf,
     ])
 
     # 4. Wait for terminal state (success or failure), max ~5 min for first Spark warm-up.

@@ -47,9 +47,10 @@ docker compose -f docker/docker-compose.yaml exec -T airflow-scheduler \
     airflow dags unpause simple-etl
 
 docker compose -f docker/docker-compose.yaml exec -T airflow-scheduler \
-    airflow dags trigger simple-etl \
-        --conf "$(cat examples/simple-etl/default_params.json)"
+    airflow dags trigger simple-etl
 ```
+
+The `default_params.json` is inlined into the generated DAG at translate time, so `airflow dags trigger simple-etl` runs with those defaults out of the box. To override at runtime, pass JSON via `--conf`, e.g. `airflow dags trigger simple-etl --conf '{"ENV":"staging"}'`.
 
 Airflow UI: http://localhost:8080 (airflow / airflow). Trigger `simple-etl` and watch it run.
 
@@ -60,10 +61,6 @@ To tear the stack down (and wipe the volumes):
 ```bash
 docker compose -f docker/docker-compose.yaml down -v
 ```
-
-## Why pass `--conf` at trigger time?
-
-The generated DAG embeds a host filesystem path for `workflow_dir` (where `default_params.json` lives). When the DAG runs inside the Airflow container, that path doesn't resolve — so the operator can't read the params file. v0.2 works around this by passing the JSON contents directly as DAG-run conf. v0.3 will fix the translator to inline params and drop this step.
 
 ## Deploy to AWS
 

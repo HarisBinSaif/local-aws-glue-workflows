@@ -37,7 +37,7 @@ def _imports_mock_operator(source: str) -> bool:
 
 def test_linear_chain_emits_runnable_dag(fixtures_dir, tmp_path):
     wf = parse_directory(fixtures_dir / "linear_chain")[0]
-    source = translate_workflow(wf, workflow_dir=str(tmp_path))
+    source = translate_workflow(wf, default_params={})
     assert _imports_mock_operator(source)
     assert 'dag_id="linear-etl"' in source
     # Each job becomes a task
@@ -51,14 +51,14 @@ def test_linear_chain_emits_runnable_dag(fixtures_dir, tmp_path):
 
 def test_scheduled_dag_carries_cron(fixtures_dir, tmp_path):
     wf = parse_directory(fixtures_dir / "scheduled")[0]
-    source = translate_workflow(wf, workflow_dir=str(tmp_path))
+    source = translate_workflow(wf, default_params={})
     # Cron expression preserved verbatim
     assert "cron(0 2 * * ? *)" in source
 
 
 def test_parallel_branches_dag(fixtures_dir, tmp_path):
     wf = parse_directory(fixtures_dir / "parallel_branches")[0]
-    source = translate_workflow(wf, workflow_dir=str(tmp_path))
+    source = translate_workflow(wf, default_params={})
     compile(source, "<dag>", "exec")
     # branch_a and branch_b both depend on src; merge depends on both
     assert "source_job" in source
@@ -89,7 +89,7 @@ def test_identifier_disambiguates_collisions_in_translate_workflow(tmp_path):
             "foo_bar": Job(name="foo_bar", script_location="s3://x/foo_bar.py"),
         },
     )
-    source = translate_workflow(wf, workflow_dir=str(tmp_path))
+    source = translate_workflow(wf, default_params={})
     # Both jobs must appear as task_id values
     assert 'job_name="foo-bar"' in source
     assert 'job_name="foo_bar"' in source
@@ -128,7 +128,7 @@ def test_or_predicate_rejected_at_translate(tmp_path):
         },
     )
     with pytest.raises(UnsupportedTriggerError, match="OR predicate"):
-        translate_workflow(wf, workflow_dir=str(tmp_path))
+        translate_workflow(wf, default_params={})
 
 
 def test_failed_state_rejected_at_translate(tmp_path):
@@ -155,20 +155,24 @@ def test_failed_state_rejected_at_translate(tmp_path):
         },
     )
     with pytest.raises(UnsupportedTriggerError, match=r"state 'FAILED'"):
-        translate_workflow(wf, workflow_dir=str(tmp_path))
+        translate_workflow(wf, default_params={})
 
 
 def test_translate_workflow_default_executor_is_mock(fixtures_dir, tmp_path):
-    """Backwards-compat: no executor arg -> MockGlueJobOperator (the v0.1 default)."""
+    """Backwards-compat: no executor arg -> MockGlueJobOperator (the default)."""
     wf = parse_directory(fixtures_dir / "linear_chain")[0]
-    source = translate_workflow(wf, workflow_dir=str(tmp_path))
+    source = translate_workflow(wf, default_params={})
     assert "MockGlueJobOperator" in source
     assert "GlueDockerOperator" not in source
 
 
 def test_translate_workflow_glue_docker_executor(fixtures_dir, tmp_path):
     wf = parse_directory(fixtures_dir / "linear_chain")[0]
-    source = translate_workflow(wf, workflow_dir=str(tmp_path), executor="glue-docker")
+    source = translate_workflow(
+        wf,
+        default_params={"OUTPUT_BUCKET": "local-output"},
+        executor="glue-docker",
+    )
     assert "GlueDockerOperator" in source
     assert "MockGlueJobOperator" not in source
     # Each task carries its script_location (quote style is repr-driven, so check substring).
@@ -177,6 +181,8 @@ def test_translate_workflow_glue_docker_executor(fixtures_dir, tmp_path):
     assert "s3://x/load.py" in source
     # script_location is rendered as a kwarg (quote-agnostic check).
     assert source.count("script_location=") == 3
+    # default_params is inlined as a dict literal in each task.
+    assert "default_params={'OUTPUT_BUCKET': 'local-output'}" in source
     # Compiles
     compile(source, "<dag>", "exec")
 
@@ -184,4 +190,4 @@ def test_translate_workflow_glue_docker_executor(fixtures_dir, tmp_path):
 def test_translate_workflow_unknown_executor_rejected(fixtures_dir, tmp_path):
     wf = parse_directory(fixtures_dir / "linear_chain")[0]
     with pytest.raises(ValueError, match="executor"):
-        translate_workflow(wf, workflow_dir=str(tmp_path), executor="bogus")
+        translate_workflow(wf, default_params={}, executor="bogus")

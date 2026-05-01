@@ -26,7 +26,7 @@ mypy src              # type-clean under --strict
 
 ## Scope
 
-v0.2 covers: Terraform input, jobs only, three trigger types (ON_DEMAND, CONDITIONAL, SCHEDULED), and two executors (mock + glue-docker). Out-of-scope: crawlers, EVENT triggers, job bookmarks, Glue Catalog API mocks. These are deferred to later plans — please open an issue before starting.
+v0.3 covers: Terraform input, jobs only, three trigger types (ON_DEMAND, CONDITIONAL, SCHEDULED), and two executors (mock + glue-docker). Out-of-scope: crawlers, EVENT triggers, job bookmarks, Glue Catalog API mocks. These are deferred to later plans — please open an issue before starting.
 
 ## Docker stack (Plan B)
 

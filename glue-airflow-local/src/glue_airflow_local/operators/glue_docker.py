@@ -2,9 +2,9 @@
 
 The operator strips the ``s3://<bucket>/`` prefix from the Terraform ``script_location``
 and looks for the rest under a host-mounted ``/scripts/`` path inside the container.
-Job parameters (default_params.json + DAG-run conf) are passed to the script as
-``--KEY=VALUE`` arguments to ``spark-submit``; the user's ``getResolvedOptions(...)`` call
-reads them as it would in real Glue.
+Job parameters (compile-time default_params + DAG-run conf) are passed to the script
+as ``--KEY=VALUE`` arguments to ``spark-submit``; the user's ``getResolvedOptions(...)``
+call reads them as it would in real Glue.
 
 S3 calls inside the container hit MinIO via the ``AWS_ENDPOINT_URL`` env var set on the
 container itself (see ``docker/docker-compose.yaml``), not by this operator.
@@ -12,12 +12,11 @@ container itself (see ``docker/docker-compose.yaml``), not by this operator.
 
 from __future__ import annotations
 
-import json
 import logging
-from pathlib import Path
 from typing import Any
 
 import docker
+import docker.errors
 from airflow.models import BaseOperator
 from airflow.utils.context import Context
 
@@ -40,8 +39,11 @@ def _resolve_script_path(script_location: str, mount: str) -> str:
             f"script_location must start with s3://; got {script_location!r}"
         )
     rest = script_location[len(_S3_PREFIX):]
-    # Strip the bucket name (the first path segment).
     _, _, key = rest.partition("/")
+    if not key:
+        raise ValueError(
+            f"script_location has no key after bucket: {script_location!r}"
+        )
     return f"{mount.rstrip('/')}/{key}"
 
 
@@ -64,14 +66,14 @@ def _build_spark_submit_argv(
 class GlueDockerOperator(BaseOperator):
     """Run a PySpark Glue job inside the long-running Glue Docker container."""
 
-    template_fields = ("job_name", "script_location", "workflow_dir")
+    template_fields = ("job_name", "script_location")
 
     def __init__(
         self,
         *,
         job_name: str,
         script_location: str,
-        workflow_dir: str,
+        default_params: dict[str, Any] | None = None,
         container_name: str = _DEFAULT_CONTAINER,
         script_mount: str = _DEFAULT_MOUNT,
         **kwargs: Any,
@@ -79,17 +81,18 @@ class GlueDockerOperator(BaseOperator):
         super().__init__(**kwargs)
         self.job_name = job_name
         self.script_location = script_location
-        self.workflow_dir = workflow_dir
+        self.default_params = default_params or {}
         self.container_name = container_name
         self.script_mount = script_mount
 
     def execute(self, context: Context) -> dict[str, Any]:
         params = self._merged_params(context)
         script_path = _resolve_script_path(self.script_location, self.script_mount)
+        workflow_run_id = self._workflow_run_id(context)
         argv = _build_spark_submit_argv(
             script_path=script_path,
             job_name=self.job_name,
-            workflow_run_id=str(context.get("ds_nodash", "")),
+            workflow_run_id=workflow_run_id,
             params=params,
         )
         _LOG.info(
@@ -98,8 +101,20 @@ class GlueDockerOperator(BaseOperator):
             self.container_name,
             argv,
         )
-        client = docker.from_env()
-        container = client.containers.get(self.container_name)
+        try:
+            client = docker.from_env()
+            container = client.containers.get(self.container_name)
+        except docker.errors.NotFound as exc:
+            raise RuntimeError(
+                f"GlueDockerOperator: container {self.container_name!r} not found. "
+                f"Did you run `docker compose -f docker/docker-compose.yaml up -d`?"
+            ) from exc
+        except docker.errors.APIError as exc:
+            raise RuntimeError(
+                f"GlueDockerOperator: cannot reach the Docker daemon ({exc}). "
+                f"Is Docker running and is the host socket mounted?"
+            ) from exc
+
         result = container.exec_run(argv, demux=False)
         output = result.output.decode("utf-8", errors="replace") if result.output else ""
         for line in output.splitlines():
@@ -116,10 +131,14 @@ class GlueDockerOperator(BaseOperator):
         }
 
     def _merged_params(self, context: Context) -> dict[str, Any]:
-        defaults_path = Path(self.workflow_dir) / "default_params.json"
-        defaults: dict[str, Any] = {}
-        if defaults_path.is_file():
-            defaults = json.loads(defaults_path.read_text())
         dag_run = context.get("dag_run")
         conf = getattr(dag_run, "conf", None) or {}
-        return {**defaults, **conf}
+        return {**self.default_params, **conf}
+
+    def _workflow_run_id(self, context: Context) -> str:
+        """Prefer ``dag_run.run_id`` (always unique); fall back to ``ds_nodash``."""
+        dag_run = context.get("dag_run")
+        run_id = getattr(dag_run, "run_id", None)
+        if run_id:
+            return str(run_id)
+        return str(context.get("ds_nodash", ""))

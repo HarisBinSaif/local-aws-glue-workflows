@@ -16,17 +16,17 @@ with DAG(
     extract_job = MockGlueJobOperator(
         task_id="extract_job",
         job_name="extract-job",
-        workflow_dir='examples/simple-etl',
+        default_params={'INPUT_BUCKET': 'local-input', 'INPUT_KEY': 'sample-input.csv', 'STAGING_BUCKET': 'local-staging', 'OUTPUT_BUCKET': 'local-output', 'ENV': 'local'},
     )
     load_job = MockGlueJobOperator(
         task_id="load_job",
         job_name="load-job",
-        workflow_dir='examples/simple-etl',
+        default_params={'INPUT_BUCKET': 'local-input', 'INPUT_KEY': 'sample-input.csv', 'STAGING_BUCKET': 'local-staging', 'OUTPUT_BUCKET': 'local-output', 'ENV': 'local'},
     )
     transform_job = MockGlueJobOperator(
         task_id="transform_job",
         job_name="transform-job",
-        workflow_dir='examples/simple-etl',
+        default_params={'INPUT_BUCKET': 'local-input', 'INPUT_KEY': 'sample-input.csv', 'STAGING_BUCKET': 'local-staging', 'OUTPUT_BUCKET': 'local-output', 'ENV': 'local'},
     )
     transform_job >> load_job
     extract_job >> transform_job
