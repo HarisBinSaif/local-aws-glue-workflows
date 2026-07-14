@@ -30,6 +30,6 @@ See the workspace-level [`../examples/simple-etl/`](../examples/simple-etl) for 
 
 ## Status
 
-v0.3. Reads `aws_glue_workflow` + `aws_glue_trigger` (ON_DEMAND, CONDITIONAL, SCHEDULED) from a Terraform directory; emits Airflow DAGs that either run with mock operators or `docker exec` `spark-submit` into a long-running Glue 5 container. Generated DAGs are filesystem-independent — `default_params.json` is inlined at translate time.
+v0.4. Reads `aws_glue_workflow` + `aws_glue_trigger` (ON_DEMAND, CONDITIONAL, SCHEDULED) from a Terraform directory; emits Airflow DAGs that either run with mock operators or `docker exec` `spark-submit` into a long-running Glue 5 container. Generated DAGs are filesystem-independent — Terraform-declared parameters (`default_run_properties`, `default_arguments`, `actions[].arguments`) are honored and merged in Glue's precedence order, with `default_params.json` as a soft override layer.
 
-See the workspace-level [`../README.md`](../README.md) for the full Known Limitations list and the v0.2 → v0.3 breaking-change note.
+See the workspace-level [`../README.md`](../README.md) for the full Known Limitations list and version-to-version notes.

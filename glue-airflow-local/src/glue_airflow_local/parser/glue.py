@@ -60,6 +60,23 @@ def _block_first(block: Any) -> dict[str, Any]:
     raise GlueParseError(f"Unexpected block shape: {type(block).__name__}")
 
 
+def _strip_arg_prefix(args: dict[str, Any] | None) -> dict[str, str]:
+    """Glue argument keys conventionally start with ``--``; strip so they match
+    what the user's PySpark sees from ``getResolvedOptions``.
+
+    Values are coerced to ``str`` because that's what ``--KEY=VALUE`` argv and
+    ``getResolvedOptions`` produce; numeric or boolean Terraform values would
+    arrive as strings at runtime anyway.
+    """
+    if not args:
+        return {}
+    out: dict[str, str] = {}
+    for k, v in args.items():
+        key = k[2:] if k.startswith("--") else k
+        out[key] = str(v)
+    return out
+
+
 def _block_all(block: Any) -> list[dict[str, Any]]:
     """Like _block_first, but returns all entries (used for `actions` / `conditions`)."""
     if isinstance(block, list):
@@ -83,7 +100,14 @@ def _extract_actions(attrs: dict[str, Any], table: ResourceTable) -> list[Action
             raise UnsupportedTriggerError(
                 "Only job actions are supported; crawler actions are deferred to a later release"
             )
-        actions.append(Action(job_name=resolve_string(str(action_block["job_name"]), table)))
+        raw_args = action_block.get("arguments")
+        arguments = _strip_arg_prefix(raw_args if isinstance(raw_args, dict) else None)
+        actions.append(
+            Action(
+                job_name=resolve_string(str(action_block["job_name"]), table),
+                arguments=arguments,
+            )
+        )
     return actions
 
 
@@ -132,7 +156,15 @@ def _extract_jobs(parsed_files: list[dict[str, Any]], table: ResourceTable) -> d
                 f"aws_glue_job {logical_name!r}: command.script_location is required"
             )
         script_location = resolve_string(str(script_raw), table)
-        jobs[name] = Job(name=name, script_location=script_location)
+        raw_default_args = attrs.get("default_arguments")
+        default_arguments = _strip_arg_prefix(
+            raw_default_args if isinstance(raw_default_args, dict) else None
+        )
+        jobs[name] = Job(
+            name=name,
+            script_location=script_location,
+            default_arguments=default_arguments,
+        )
     return jobs
 
 
@@ -189,8 +221,16 @@ def extract_workflows(parsed_files: Iterable[dict[str, Any]]) -> list[Workflow]:
         description = attrs.get("description")
         if description is not None:
             description = resolve_string(str(description), table)
+        raw_run_props = attrs.get("default_run_properties")
+        default_run_properties: dict[str, str] = {}
+        if isinstance(raw_run_props, dict):
+            for k, v in raw_run_props.items():
+                default_run_properties[k] = resolve_string(str(v), table)
         workflows_by_name[wf_name] = Workflow(
-            name=wf_name, triggers=[], description=description
+            name=wf_name,
+            triggers=[],
+            description=description,
+            default_run_properties=default_run_properties,
         )
 
     if not workflows_by_name:

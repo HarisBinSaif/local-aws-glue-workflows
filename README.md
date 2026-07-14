@@ -55,7 +55,7 @@ See [`examples/simple-etl/README.md`](./examples/simple-etl/README.md) for the f
 
 ## Status
 
-v0.3 — both executor modes work end-to-end. Generated DAGs are filesystem-independent (`default_params` inlined at translate time). Glue 5.0 image pinned to a specific digest. Tested on Linux and Apple Silicon Docker.
+v0.4 — both executor modes work end-to-end. Generated DAGs are filesystem-independent (Terraform-declared parameters honored: `default_run_properties`, `default_arguments`, `actions[].arguments`; `default_params.json` overrides on top). Glue 5.0 image pinned to a specific digest. Tested on Linux and Apple Silicon Docker.
 
 ## Known limitations
 
@@ -73,6 +73,10 @@ The local Docker stack is for development only. It uses plaintext default creden
 ## v0.2 → v0.3 breaking change
 
 The operator constructor signature changed: `MockGlueJobOperator` and `GlueDockerOperator` no longer take `workflow_dir`. Both now take `default_params: dict | None`, which the translator inlines into the generated DAG at translate time. **Re-run `glue-airflow-local translate ...` against your Terraform to regenerate any v0.2 DAGs**; loading an old DAG file will fail with a `TypeError` for the missing `workflow_dir` kwarg.
+
+## v0.3 → v0.4
+
+Terraform parameter declarations are now honored. The translator reads `aws_glue_workflow.default_run_properties`, `aws_glue_job.default_arguments`, and `aws_glue_trigger.actions[].arguments`, merges them in Glue's precedence order, and inlines the result into the generated DAG. `default_params.json` continues to work as a soft override layer for local-only values (bucket-name swaps, dev secrets) — anything in the JSON file overrides the Terraform-declared values. No code change required for users whose params already live in Terraform; existing v0.3 setups keep working unchanged.
 
 ## License
 

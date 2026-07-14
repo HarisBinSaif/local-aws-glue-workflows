@@ -32,17 +32,30 @@ class LogicalOperator(str, Enum):
 
 @dataclass(frozen=True)
 class Job:
-    """A Glue ETL job: name plus the location of its PySpark script."""
+    """A Glue ETL job: name plus the location of its PySpark script.
+
+    ``default_arguments`` mirrors ``aws_glue_job.default_arguments`` from
+    Terraform. The Glue convention is for keys to start with ``--``; the parser
+    strips the prefix at parse time so values match what the user's PySpark
+    script will see via ``getResolvedOptions``.
+    """
 
     name: str
     script_location: str
+    default_arguments: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class Action:
-    """Single action in a trigger -- for now, only job actions (crawlers deferred)."""
+    """Single action in a trigger -- for now, only job actions (crawlers deferred).
+
+    ``arguments`` mirrors ``aws_glue_trigger.actions[].arguments`` from
+    Terraform. As with :class:`Job.default_arguments`, the ``--`` prefix is
+    stripped at parse time.
+    """
 
     job_name: str
+    arguments: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -106,9 +119,15 @@ class Trigger:
 
 @dataclass
 class Workflow:
-    """A Glue workflow: a set of triggers wiring jobs into a runnable graph."""
+    """A Glue workflow: a set of triggers wiring jobs into a runnable graph.
+
+    ``default_run_properties`` mirrors ``aws_glue_workflow.default_run_properties``
+    from Terraform: workflow-wide parameter baselines that every job inherits
+    unless a job- or action-level override exists.
+    """
 
     name: str
     triggers: list[Trigger]
     jobs: dict[str, Job] = field(default_factory=dict)
     description: str | None = None
+    default_run_properties: dict[str, str] = field(default_factory=dict)

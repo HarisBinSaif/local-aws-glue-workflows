@@ -76,3 +76,34 @@ def test_parse_directory_reads_all_tf_files(fixtures_dir):
     workflows = parse_directory(fixtures_dir / "linear_chain")
     assert len(workflows) == 1
     assert workflows[0].name == "linear-etl"
+
+
+def test_parser_extracts_workflow_default_run_properties(fixtures_dir):
+    workflows = parse_directory(fixtures_dir / "with_default_args")
+    wf = workflows[0]
+    assert wf.default_run_properties == {"OUTPUT_BUCKET": "wf-bucket", "ENV": "wf"}
+
+
+def test_parser_extracts_job_default_arguments_strips_dash_prefix(fixtures_dir):
+    workflows = parse_directory(fixtures_dir / "with_default_args")
+    wf = workflows[0]
+    extract = wf.jobs["extract-job"]
+    # Keys had `--` prefix in Terraform; parser strips so they match getResolvedOptions.
+    assert extract.default_arguments == {"ENV": "job-env", "JOB_LEVEL": "yes"}
+
+
+def test_parser_extracts_action_arguments(fixtures_dir):
+    workflows = parse_directory(fixtures_dir / "with_default_args")
+    wf = workflows[0]
+    start = next(t for t in wf.triggers if t.name == "start")
+    assert start.actions[0].arguments == {"ENV": "trigger-env", "TRIGGER_LEVEL": "yes"}
+
+
+def test_parser_no_default_args_when_absent(fixtures_dir):
+    """Existing single_ondemand fixture has no default_arguments; parser returns empty dicts."""
+    workflows = parse_directory(fixtures_dir / "single_ondemand")
+    wf = workflows[0]
+    assert wf.default_run_properties == {}
+    assert wf.jobs["extract-job"].default_arguments == {}
+    by_name = {t.name: t for t in wf.triggers}
+    assert by_name["start-trigger"].actions[0].arguments == {}

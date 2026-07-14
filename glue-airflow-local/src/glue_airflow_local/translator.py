@@ -47,7 +47,8 @@ def translate_workflow(
     validate_workflow(workflow)
     _check_translation_supported(workflow)
 
-    params_literal = repr(default_params or {})
+    json_overrides = default_params or {}
+    action_args_per_job = _resolve_action_arguments_per_job(workflow)
     schedule = _pick_schedule(workflow)
     upstreams = _build_upstream_map(workflow)
 
@@ -76,6 +77,13 @@ def translate_workflow(
             used[base] = 0
             var = base
         var_for[job_name] = var
+        effective = _effective_params_for_job(
+            workflow,
+            job_name,
+            json_overrides,
+            action_args_per_job.get(job_name, {}),
+        )
+        params_literal = repr(effective)
         if executor == "mock":
             _emit_mock_task(out, var, job_name, params_literal)
         else:
@@ -157,6 +165,59 @@ def _check_translation_supported(workflow: Workflow) -> None:
                         f"is not supported yet (only SUCCEEDED). A future release will map "
                         f"FAILED/TIMEOUT/STOPPED to Airflow trigger rules."
                     )
+
+
+def _resolve_action_arguments_per_job(workflow: Workflow) -> dict[str, dict[str, str]]:
+    """Walk triggers and return ``{job_name: action_arguments}``.
+
+    A job can be the action of multiple triggers in Glue, where each firing
+    resolves arguments at run time. Airflow's task is a single instance, so
+    we can't reproduce per-firing argument variation. The compromise: if
+    multiple triggers fire the same job with non-empty, conflicting
+    ``actions[].arguments``, raise so the user fixes the Terraform; if they
+    agree (or only one provides arguments), pick the non-empty set.
+    """
+    per_job: dict[str, dict[str, str]] = {}
+    for trig in workflow.triggers:
+        for action in trig.actions:
+            existing = per_job.get(action.job_name)
+            if existing is None:
+                per_job[action.job_name] = dict(action.arguments)
+            elif action.arguments and existing and action.arguments != existing:
+                raise UnsupportedTriggerError(
+                    f"Job {action.job_name!r} is fired by multiple triggers with conflicting "
+                    f"action arguments. Glue resolves these per-firing; Airflow tasks have a "
+                    f"single argument set. Make the actions[].arguments identical, or remove "
+                    f"arguments from all but one trigger that fires this job."
+                )
+            elif action.arguments and not existing:
+                # Earlier trigger had no args; this one does. Use this one's.
+                per_job[action.job_name] = dict(action.arguments)
+            # else: this action has no args, existing wins; nothing to do.
+    return per_job
+
+
+def _effective_params_for_job(
+    workflow: Workflow,
+    job_name: str,
+    json_overrides: dict[str, Any],
+    action_args: dict[str, str],
+) -> dict[str, str]:
+    """Merge param sources for ``job_name`` in Glue's precedence order.
+
+    Order (lowest to highest priority):
+      1. ``workflow.default_run_properties``
+      2. ``job.default_arguments``
+      3. ``action.arguments`` for the action that fires this job
+      4. ``json_overrides`` -- the local ``default_params.json`` soft-override
+    """
+    job = workflow.jobs[job_name]
+    return {
+        **workflow.default_run_properties,
+        **job.default_arguments,
+        **action_args,
+        **{k: str(v) for k, v in json_overrides.items()},
+    }
 
 
 def _build_upstream_map(workflow: Workflow) -> dict[str, set[str]]:

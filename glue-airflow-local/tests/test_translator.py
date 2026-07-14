@@ -191,3 +191,90 @@ def test_translate_workflow_unknown_executor_rejected(fixtures_dir, tmp_path):
     wf = parse_directory(fixtures_dir / "linear_chain")[0]
     with pytest.raises(ValueError, match="executor"):
         translate_workflow(wf, default_params={}, executor="bogus")
+
+
+def test_translator_merges_workflow_job_action_in_glue_precedence():
+    """Effective params: workflow defaults < job defaults < action args < json override."""
+    wf = Workflow(
+        name="w",
+        triggers=[
+            Trigger(
+                name="start",
+                type=TriggerType.ON_DEMAND,
+                actions=[
+                    Action(
+                        job_name="j",
+                        arguments={"ENV": "from-action", "ACTION_LEVEL": "yes"},
+                    )
+                ],
+            )
+        ],
+        jobs={
+            "j": Job(
+                name="j",
+                script_location="s3://x/j.py",
+                default_arguments={"ENV": "from-job", "JOB_LEVEL": "yes"},
+            )
+        },
+        default_run_properties={"ENV": "from-workflow", "WF_LEVEL": "yes"},
+    )
+    source = translate_workflow(
+        wf, default_params={"ENV": "from-json", "JSON_LEVEL": "yes"}
+    )
+    # ENV: action overrides job overrides workflow; json overrides action.
+    assert "'ENV': 'from-json'" in source
+    # All four levels are present in the merged dict.
+    for marker in ("WF_LEVEL", "JOB_LEVEL", "ACTION_LEVEL", "JSON_LEVEL"):
+        assert f"'{marker}': 'yes'" in source
+
+
+def test_translator_rejects_conflicting_action_arguments_for_same_job():
+    """If two triggers fire the same job with conflicting action arguments, fail loudly."""
+    wf = Workflow(
+        name="w",
+        triggers=[
+            Trigger(
+                name="t1",
+                type=TriggerType.ON_DEMAND,
+                actions=[Action(job_name="j", arguments={"ENV": "v1"})],
+            ),
+            Trigger(
+                name="t2",
+                type=TriggerType.CONDITIONAL,
+                actions=[Action(job_name="j", arguments={"ENV": "v2"})],
+                predicate=Predicate(conditions=(Condition(job_name="other"),)),
+            ),
+        ],
+        jobs={
+            "j": Job(name="j", script_location="s3://x/j.py"),
+            "other": Job(name="other", script_location="s3://x/other.py"),
+        },
+    )
+    with pytest.raises(UnsupportedTriggerError, match="conflicting"):
+        translate_workflow(wf, default_params={})
+
+
+def test_translator_allows_same_job_fired_from_multiple_triggers_when_no_conflict():
+    """Two triggers firing the same job with no/identical action arguments is fine."""
+    wf = Workflow(
+        name="w",
+        triggers=[
+            Trigger(
+                name="t1",
+                type=TriggerType.ON_DEMAND,
+                actions=[Action(job_name="j")],
+            ),
+            Trigger(
+                name="t2",
+                type=TriggerType.CONDITIONAL,
+                actions=[Action(job_name="j")],
+                predicate=Predicate(conditions=(Condition(job_name="other"),)),
+            ),
+        ],
+        jobs={
+            "j": Job(name="j", script_location="s3://x/j.py"),
+            "other": Job(name="other", script_location="s3://x/other.py"),
+        },
+    )
+    # Should not raise.
+    translate_workflow(wf, default_params={})
